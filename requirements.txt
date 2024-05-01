@@ -1,0 +1,15 @@
+# torch torchvision --index-url https://download.pytorch.org/whl/cu118
+numpy
+numba
+pandas 
+ipykernel 
+# pymatgen
+# mp-api 
+# mpcontribs-client 
+scikit-learn
+scikit-optimize
+orjson
+zstandard
+matplotlib
+clearml
+pymatgen
