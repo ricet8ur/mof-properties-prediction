@@ -491,11 +491,12 @@ class CIFData(Dataset):
                     import multiprocessing
 
                     manager = multiprocessing.Manager()
-                    with open(path, "rb") as f:
-                        # avoid copy-on-read with shared dict
-                        self.cifs = manager.dict(
-                            [(k, v) for k, v in json.loads(f.read()).items()]
-                        )
+                    if not os.path.exists(self.root_dir+'cif_cache'):
+                        with open(path, "rb") as f:
+                            # avoid copy-on-read with shared dict
+                            self.cifs = manager.dict(
+                                [(k, v) for k, v in json.loads(f.read()).items()]
+                            )
             else:
                 # can read individual CIF files later
                 self.cifs = None
@@ -505,6 +506,7 @@ class CIFData(Dataset):
 
     def populate_cache(self, cif_id, cifs=None):
         # can use local cifs, self.cifs or None in case of individual CIF files
+        is_not_enough_neighbors = False
         if os.path.exists(os.path.join(self.root_dir+'cif_cache', cif_id+'.pkl')):
             with open(os.path.join(self.root_dir+'cif_cache', cif_id+'.pkl'), 'rb') as f:
                 pkl_data = pickle.load(f)
@@ -533,7 +535,6 @@ class CIFData(Dataset):
             all_nbrs = get_all_neighbors(crystal, self.radius, include_index=True)
             all_nbrs = [sorted(nbrs, key=lambda x: x[1]) for nbrs in all_nbrs]
             nbr_fea_idx, nbr_fea = [], []
-            is_not_enough_neighbors = False
             for nbr in all_nbrs:
                 if len(nbr) < self.max_num_nbr:
                     warnings.warn(
@@ -569,7 +570,7 @@ class CIFData(Dataset):
         cif_id = self.idx2cif_id[self.idx_sequence[idx]]
         target = self.cif_id2target[cif_id]
         if cif_id not in self.cache:
-            print("not found", cif_id, "in cache", list(self.cache.keys())[:2])
-            self.populate_cache(cif_id, self.cifs)
+            # print("not found", cif_id, "in cache", list(self.cache.keys())[:2])
+            self.populate_cache(cif_id)
         target = torch.Tensor([float(target)])
         return (self.cache[cif_id], target, cif_id)
