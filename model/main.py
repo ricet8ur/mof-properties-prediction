@@ -387,8 +387,9 @@ def validate(val_loader, model, criterion, epoch,normalizer, test=False):
                 target_var = Variable(target_normed)
 
         # compute output
-        output = model(*input_var)
-        loss = criterion(output, target_var)
+        with torch.no_grad():
+            output = model(*input_var)
+            loss = criterion(output, target_var)
 
         # measure accuracy and record loss
         if args.task == 'regression':

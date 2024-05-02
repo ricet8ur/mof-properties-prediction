@@ -6,7 +6,7 @@ import json
 import os
 import random
 import warnings
-
+import pickle
 import numpy as np
 import torch
 from pymatgen.core.structure import Structure
@@ -505,52 +505,62 @@ class CIFData(Dataset):
 
     def populate_cache(self, cif_id, cifs=None):
         # can use local cifs, self.cifs or None in case of individual CIF files
-
-        if len(self.cache) > self.max_cache_size:
-            # pop random feature from cache to keep its size constant
-            amount_to_pop = 10
-            for random_idx in np.random.choice(list(self.cache.keys()), amount_to_pop):
-                if random_idx in self.cache:
-                    self.cache.pop(random_idx)
-
-        if cifs is None:
-            crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
+        if os.path.exists(os.path.join(self.root_dir+'cif_cache', cif_id+'.pkl')):
+            with open(os.path.join(self.root_dir+'cif_cache', cif_id+'.pkl'), 'rb') as f:
+                pkl_data = pickle.load(f)
+                atom_fea = pkl_data[0]
+                nbr_fea = pkl_data[1]
+                nbr_fea_idx = pkl_data[2]
         else:
-            crystal = Structure.from_dict(cifs[cif_id])
-        atom_fea = np.vstack(
-            [
-                self.ari.get_atom_fea(crystal[i].specie.number)
-                for i in range(len(crystal))
-            ]
-        )
-        atom_fea = torch.Tensor(atom_fea)
-        all_nbrs = get_all_neighbors(crystal, self.radius, include_index=True)
-        all_nbrs = [sorted(nbrs, key=lambda x: x[1]) for nbrs in all_nbrs]
-        nbr_fea_idx, nbr_fea = [], []
-        is_not_enough_neighbors = False
-        for nbr in all_nbrs:
-            if len(nbr) < self.max_num_nbr:
-                warnings.warn(
-                    "{} not find enough neighbors to build graph. "
-                    "If it happens frequently, consider increase "
-                    "radius.".format(cif_id)
-                )
-                nbr_fea_idx.append(
-                    list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
-                )
-                nbr_fea.append(
-                    list(map(lambda x: x[1], nbr))
-                    + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
-                )
-                is_not_enough_neighbors = True
+            if len(self.cache) > self.max_cache_size:
+                # pop random feature from cache to keep its size constant
+                amount_to_pop = 10
+                for random_idx in np.random.choice(list(self.cache.keys()), amount_to_pop):
+                    if random_idx in self.cache:
+                        self.cache.pop(random_idx)
+
+            if cifs is None:
+                crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
             else:
-                nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
-                nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
-        nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
-        nbr_fea = self.gdf.expand(nbr_fea)
-        atom_fea = torch.Tensor(atom_fea)
-        nbr_fea = torch.Tensor(nbr_fea)
-        nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
+                crystal = Structure.from_dict(cifs[cif_id])
+            atom_fea = np.vstack(
+                [
+                    self.ari.get_atom_fea(crystal[i].specie.number)
+                    for i in range(len(crystal))
+                ]
+            )
+            atom_fea = torch.Tensor(atom_fea)
+            all_nbrs = get_all_neighbors(crystal, self.radius, include_index=True)
+            all_nbrs = [sorted(nbrs, key=lambda x: x[1]) for nbrs in all_nbrs]
+            nbr_fea_idx, nbr_fea = [], []
+            is_not_enough_neighbors = False
+            for nbr in all_nbrs:
+                if len(nbr) < self.max_num_nbr:
+                    warnings.warn(
+                        "{} not find enough neighbors to build graph. "
+                        "If it happens frequently, consider increase "
+                        "radius.".format(cif_id)
+                    )
+                    nbr_fea_idx.append(
+                        list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
+                    )
+                    nbr_fea.append(
+                        list(map(lambda x: x[1], nbr))
+                        + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
+                    )
+                    is_not_enough_neighbors = True
+                else:
+                    nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
+                    nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
+            nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
+            nbr_fea = self.gdf.expand(nbr_fea)
+            atom_fea = torch.Tensor(atom_fea)
+            nbr_fea = torch.Tensor(nbr_fea)
+            nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
+            with open(os.path.join(self.root_dir+'cif_cache', cif_id+'.pkl'), 'wb') as f:
+                pickle.dump(
+                    (atom_fea, nbr_fea, nbr_fea_idx), f)
+
         self.cache[cif_id] = (atom_fea, nbr_fea, nbr_fea_idx)
         return is_not_enough_neighbors
 
