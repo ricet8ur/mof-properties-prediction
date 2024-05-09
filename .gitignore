@@ -4,3 +4,5 @@
 **/cifs.json
 **/props.json
 **/cif_cache
+artifacts
+data/id_prop*
